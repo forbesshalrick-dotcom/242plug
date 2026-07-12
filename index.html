@@ -76,6 +76,11 @@ nav::-webkit-scrollbar{display:none;}
 .bicon{width:26px;height:26px;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.2);transition:all 0.2s;flex-shrink:0;}
 .bicon:hover{transform:scale(1.12);}
 .bicon.reorder-active{background:rgba(255,170,51,0.3);border-color:var(--orange);}
+.bicon.flag-active{background:rgba(255,68,68,0.35);border-color:#ff4444;}
+/* Staff-attention highlight — only staff (employees) see the red frame */
+body.role-employee .shoe-card.flagged{border-color:#ff4444;box-shadow:0 0 0 2px rgba(255,68,68,0.55),0 0 16px rgba(255,68,68,0.35);}
+.shoe-card .flag-ribbon{display:none;}
+body.role-employee .shoe-card.flagged .flag-ribbon{display:block;position:absolute;top:6px;left:6px;z-index:11;background:#ff4444;color:#fff;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:2px 7px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.4);}
 
 /* SLIDER — StockX style */
 @keyframes sliderGlow{0%,100%{box-shadow:0 0 3px rgba(200,241,53,0.3),0 0 6px rgba(200,241,53,0.1);}50%{box-shadow:0 0 8px rgba(200,241,53,0.9),0 0 16px rgba(200,241,53,0.5),0 0 28px rgba(200,241,53,0.2);}}
@@ -1519,6 +1524,15 @@ function toggleReorder(id){
   checkReorderAlerts();showToast(s.reorder?'🔄 Reorder alert ON':'Reorder alert off');
 }
 
+// Flag a shoe in red for staff attention (needs fixing/adjusting)
+function toggleFlag(id){
+  const s=shoes.find(x=>x.id===id);if(!s)return;
+  s.flagged=!s.flagged;save();
+  document.getElementById('fi-'+id)?.classList.toggle('flag-active',s.flagged);
+  document.getElementById('vw-'+id)?.closest('.shoe-card')?.classList.toggle('flagged',s.flagged);
+  showToast(s.flagged?'🚩 Flagged for staff attention':'Flag cleared');
+}
+
 // ─── I WANT THIS ─────────────────────────────────────────────
 function iWantThis(id,preSize){_sfx.whoosh();
   const s=shoes.find(x=>x.id===id);if(!s)return;
@@ -2054,13 +2068,15 @@ function renderInventory(){
     const frames=shoe.frames360&&shoe.frames360.length>0?shoe.frames360:null;
     const dispSizes=uniqueSizes(shoe.sizes);
     const isLow=!shoe.sold&&shoe.sizes.length<=2;
-    return `<div class="shoe-card${shoe.sold?' sold':''}">
+    return `<div class="shoe-card${shoe.sold?' sold':''}${shoe.flagged?' flagged':''}">
       <div class="viewer-outer">
         <div class="viewer-wrap" id="vw-${shoe.id}" style="cursor:pointer;">
           <img class="viewer-img" src="${shoe.image||''}" alt="${shoe.name}" style="cursor:${frames?'grab':'default'}"/>
           ${shoe.condition==='New'?'<div class="media-badge">New</div>':''}
+          <div class="flag-ribbon">⚑ NEEDS FIX</div>
           <div class="backend-icons">
             <div class="bicon" title="Edit" onclick="editShoe('${shoe.id}')">✏️</div>
+            <div class="bicon${shoe.flagged?' flag-active':''}" id="fi-${shoe.id}" title="Flag for staff attention" onclick="toggleFlag('${shoe.id}')">🚩</div>
             <div class="bicon${shoe.reorder?' reorder-active':''}" id="ri-${shoe.id}" title="Reorder Alert" onclick="toggleReorder('${shoe.id}')">🔄</div>
             <div class="bicon${shoe.advertised?' ad-active':''}" id="ai-${shoe.id}" title="Toggle Ad on Homepage" onclick="toggleAd('${shoe.id}')" style="${shoe.advertised?'background:rgba(200,241,53,0.25);border-color:var(--accent)':''}" >📢</div>
             ${!shoe.sold?`<div class="bicon" title="Mark size sold" onclick="openSoldPicker('${shoe.id}')" style="font-size:9px;font-weight:700;letter-spacing:0.5px;width:auto;padding:0 7px;">SOLD</div>`:`<div class="bicon" title="Relist" onclick="markUnsold('${shoe.id}')">↩</div>`}
@@ -2217,7 +2233,7 @@ function saveShoe(){const brand=document.getElementById('f-brand').value.trim();
     // else: still base64/uploading — leave frames null; Cloudinary callback will update after upload
   } else if(editingId){resolvedFrames=shoes.find(x=>x.id===editingId)?.frames360||null;}
   var _pendingUpload=pendingFrames&&pendingFrames.length>1&&(pendingFrames[0]||'').startsWith('data:');
-  const shoe={id:editingId||pendingShoeId||uid(),brand,name,nickname:document.getElementById('f-nickname').value.trim(),color:document.getElementById('f-color').value.trim(),condition:document.getElementById('f-condition').value,price:price?parseFloat(price):0,sku:document.getElementById('f-sku').value.trim(),sizes,image:pendingImage&&!pendingImage.startsWith('data:')?pendingImage:(editingId?shoes.find(x=>x.id===editingId)?.image||null:null),gallery:null,frames360:resolvedFrames,sold:editingId?shoes.find(x=>x.id===editingId)?.sold||false:false,reorder:editingId?shoes.find(x=>x.id===editingId)?.reorder||false:false,createdAt:editingId?shoes.find(x=>x.id===editingId)?.createdAt||Date.now():Date.now(),updatedAt:Date.now()};
+  const shoe={id:editingId||pendingShoeId||uid(),brand,name,nickname:document.getElementById('f-nickname').value.trim(),color:document.getElementById('f-color').value.trim(),condition:document.getElementById('f-condition').value,price:price?parseFloat(price):0,sku:document.getElementById('f-sku').value.trim(),sizes,image:pendingImage&&!pendingImage.startsWith('data:')?pendingImage:(editingId?shoes.find(x=>x.id===editingId)?.image||null:null),gallery:null,frames360:resolvedFrames,sold:editingId?shoes.find(x=>x.id===editingId)?.sold||false:false,reorder:editingId?shoes.find(x=>x.id===editingId)?.reorder||false:false,flagged:editingId?shoes.find(x=>x.id===editingId)?.flagged||false:false,createdAt:editingId?shoes.find(x=>x.id===editingId)?.createdAt||Date.now():Date.now(),updatedAt:Date.now()};
   if(editingId){const i=shoes.findIndex(x=>x.id===editingId);shoes[i]=shoe;}else shoes.unshift(shoe);
   save();closeModal();renderInventory();_sfx.success();
   // Log explicitly with detail (brand+name) — showToast wrapper will also fire but won't duplicate
@@ -2234,7 +2250,7 @@ function saveShoe(){const brand=document.getElementById('f-brand').value.trim();
 function exportInventory(){
   const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];
   const data={version:'1.0',exported:new Date().toISOString(),appName:'SNEAKERPLUG242',
-    shoes:shoes.map(s=>catalogIds.includes(s.id)?{id:s.id,_catalog:true,sizes:s.sizes,sold:s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false}:Object.assign({},s))};
+    shoes:shoes.map(s=>catalogIds.includes(s.id)?{id:s.id,_catalog:true,sizes:s.sizes,sold:s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false,flagged:s.flagged||false}:Object.assign({},s))};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -2252,7 +2268,7 @@ function handleImportFile(input){
       if(!data.shoes||!Array.isArray(data.shoes)){showToast('Invalid file',true);return;}
       let added=0,updated=0;
       data.shoes.forEach(function(imp){
-        if(imp._catalog){const ex=shoes.find(x=>x.id===imp.id);if(ex){ex.sizes=imp.sizes;ex.sold=imp.sold;ex.price=imp.price;ex.reorder=imp.reorder||false;ex.advertised=imp.advertised||false;updated++;}}
+        if(imp._catalog){const ex=shoes.find(x=>x.id===imp.id);if(ex){ex.sizes=imp.sizes;ex.sold=imp.sold;ex.price=imp.price;ex.reorder=imp.reorder||false;ex.advertised=imp.advertised||false;ex.flagged=imp.flagged||false;updated++;}}
         else{const idx=shoes.findIndex(x=>x.id===imp.id);if(idx>=0){shoes[idx]=imp;updated++;}else{shoes.unshift(imp);added++;}}
       });
       save();renderInventory();showToast('Imported ✓  +'+added+' new  '+updated+' updated');
@@ -2359,6 +2375,7 @@ function _mergeCloudData(data, rerender) {
     if (c.hasOwnProperty('price')) shoe.price = c.price;
     shoe.reorder = c.reorder || false;
     shoe.advertised = c.advertised || false;
+    shoe.flagged = c.flagged || false;
   });
 
   // ── 2. Reconcile custom shoes ──────────────────────────────
@@ -2416,7 +2433,7 @@ function _pushToCloud() {
     deletedIds: deletedIds,        // graveyard travels with every push
     shoes: shoes.map(function(s){
       return catIds.includes(s.id)
-        ? {id:s.id,_catalog:true,sizes:s.sizes,sold:s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false}
+        ? {id:s.id,_catalog:true,sizes:s.sizes,sold:s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false,flagged:s.flagged||false}
         : (function(shoe){
             var c=Object.assign({},shoe);
             // Sync frames only if they are cloud URLs (small strings).
@@ -4353,6 +4370,7 @@ function logoutRole() {
 
 function applyRoleUI() {
   const isEmployee = currentRole === 'employee';
+  document.body.classList.toggle('role-employee', isEmployee);
 
   // Show/hide admin buttons on cards
   document.querySelectorAll('.backend-icons').forEach(el => {
@@ -6096,7 +6114,7 @@ function _catIdList(){ return (window._SP_CATALOG_IDS||[]); }
 function _catMapById(){ var m={}; (window._SP_CATALOG||[]).forEach(function(c){ m[c.id]=c; }); return m; }
 // Lite form: catalog shoes → only the mutable fields; custom shoes → full (minus base64).
 function liteShoe(s){
-  if(_catIdList().indexOf(s.id)>-1) return {id:s.id,_catalog:true,sizes:s.sizes,sold:!!s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false};
+  if(_catIdList().indexOf(s.id)>-1) return {id:s.id,_catalog:true,sizes:s.sizes,sold:!!s.sold,price:s.price,reorder:s.reorder||false,advertised:s.advertised||false,flagged:!!s.flagged};
   var c=Object.assign({},s); c.video='';
   if(Array.isArray(c.frames360) && c.frames360[0] && String(c.frames360[0]).indexOf('data:')===0) c.frames360=[];
   return c;
@@ -6120,8 +6138,8 @@ function applyServerShoes(serverShoes, deletedIds){
     if(deletedIds && deletedIds.indexOf(imp.id)>-1) return;
     if(imp._catalog){
       var ex=shoes.find(function(x){return x.id===imp.id;});
-      if(ex && (JSON.stringify(ex.sizes)!==JSON.stringify(imp.sizes)||(!!ex.sold)!==(!!imp.sold)||ex.price!==imp.price||(ex.reorder||false)!==(imp.reorder||false)||(ex.advertised||false)!==(imp.advertised||false))){
-        ex.sizes=imp.sizes; ex.sold=!!imp.sold; ex.price=imp.price; ex.reorder=imp.reorder||false; ex.advertised=imp.advertised||false; changed=true;
+      if(ex && (JSON.stringify(ex.sizes)!==JSON.stringify(imp.sizes)||(!!ex.sold)!==(!!imp.sold)||ex.price!==imp.price||(ex.reorder||false)!==(imp.reorder||false)||(ex.advertised||false)!==(imp.advertised||false)||(ex.flagged||false)!==(imp.flagged||false))){
+        ex.sizes=imp.sizes; ex.sold=!!imp.sold; ex.price=imp.price; ex.reorder=imp.reorder||false; ex.advertised=imp.advertised||false; ex.flagged=imp.flagged||false; changed=true;
       }
     } else {
       var idx=shoes.findIndex(function(x){return x.id===imp.id;});
@@ -6141,7 +6159,7 @@ function syncInventory(){
       shoes.forEach(function(s){
         if(serverIds[s.id]) return;
         var isCat=catIds.indexOf(s.id)>-1;
-        if(isCat){ var c=cmap[s.id]||{}; if(JSON.stringify(s.sizes)!==JSON.stringify(c.sizes)||s.sold||(c.price!=null&&s.price!==c.price)||s.reorder||s.advertised){ shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); } }
+        if(isCat){ var c=cmap[s.id]||{}; if(JSON.stringify(s.sizes)!==JSON.stringify(c.sizes)||s.sold||(c.price!=null&&s.price!==c.price)||s.reorder||s.advertised||s.flagged){ shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); } }
         else { shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); }
       });
     }
