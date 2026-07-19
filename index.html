@@ -5184,6 +5184,19 @@ function getSales() {
   return JSON.parse(localStorage.getItem('sp_sales') || '[]');
 }
 
+// View the payment-proof screenshot pinned to a sale (staff sent it to Kiki after the
+// sale). Opens a tap-anywhere-to-close overlay; the image is served on demand by the API.
+function viewProof(saleId){
+  var url = SHOP_API + '/shop/proof/' + encodeURIComponent(saleId) + '?key=' + SHOP_KEY;
+  var ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;';
+  ov.onclick = function(){ if(ov.parentNode) document.body.removeChild(ov); };
+  ov.innerHTML = '<div style="color:#fff;font-size:13px;font-weight:600;opacity:0.85;">🧾 Payment proof — tap anywhere to close</div>'
+    + '<img src="'+url+'" alt="payment proof" style="max-width:96%;max-height:82%;border-radius:10px;object-fit:contain;background:#fff;" '
+    + 'onerror="this.replaceWith(Object.assign(document.createElement(String.fromCharCode(100,105,118)),{style:\'color:#fff;padding:30px;text-align:center;\',textContent:\'Could not load the proof image (it may still be uploading).\'}))"/>';
+  document.body.appendChild(ov);
+}
+
 // Void / reverse a sale: remove the record and put the shoe back in stock.
 function voidSale(saleId){
   if(!_requireManager('void a sale'))return;
@@ -5381,6 +5394,7 @@ function renderSalesPage() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
           <div style="font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--accent);">$${s.price.toFixed(2)}</div>
+          ${s.hasProof?`<button onclick="viewProof('${s.id}')" title="View payment proof" style="background:none;border:1px solid rgba(120,220,120,0.55);color:#66dd88;border-radius:6px;font-size:13px;font-weight:700;padding:4px 8px;cursor:pointer;">📎</button>`:''}
           <button onclick="voidSale('${s.id}')" title="Void / reverse this sale" style="background:none;border:1px solid rgba(255,80,80,0.45);color:#ff6666;border-radius:6px;font-size:10px;font-weight:700;padding:5px 9px;cursor:pointer;">Void</button>
         </div>
       </div>`;
