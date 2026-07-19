@@ -7045,6 +7045,13 @@ function syncAccounts(){
     var roles={}; try{ roles=JSON.parse(localStorage.getItem('sp_emp_roles')||'{}'); }catch(e){}
     function mergeNE(t,s){ var ch=false; Object.keys(s||{}).forEach(function(k){ if(!(k in t) || (s[k] && s[k]!==t[k])){ t[k]=s[k]; ch=true; } }); return ch; }
     var c1=mergeNE(acc, st.accounts), c2=mergeNE(roles, st.roles), c3=mergeNE(nums, st.employees);
+    // Purge any staff the server tombstoned (removed) — a stale local copy must not keep showing them.
+    ((st && st.deletedStaff) || []).forEach(function(n){
+      if(n in acc){ delete acc[n]; c1=true; }
+      if(n in roles){ delete roles[n]; c2=true; }
+      if(n in nums){ delete nums[n]; c3=true; }
+      if(typeof ACCOUNTS!=='undefined') delete ACCOUNTS[n];
+    });
     if(c1) localStorage.setItem('sp_accounts', JSON.stringify(acc));
     if(c2) localStorage.setItem('sp_emp_roles', JSON.stringify(roles));
     if(c3) saveEmployeeNumbers(nums);
