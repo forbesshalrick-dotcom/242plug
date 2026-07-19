@@ -4815,11 +4815,10 @@ function onNameSelect() {
   if (patSec) { patSec.style.display = 'block'; buildPatternGrid(); }
   if (divider) divider.style.display = supportsWebAuthn ? 'block' : 'none';
   document.getElementById('role-error').style.display = 'none';
-  if (!hasPat && !hasBio) {
-    document.getElementById('pattern-hint').textContent = 'Set your pattern (first time)';
-  } else {
-    document.getElementById('pattern-hint').textContent = 'Draw your pattern';
-  }
+  // The server decides first-time vs returning now (a pattern set on any device works here),
+  // so show a neutral prompt — a genuine new pattern triggers the "draw again to confirm" flow.
+  _patternConfirmMode = false; _patternConfirmSeq = [];
+  document.getElementById('pattern-hint').textContent = 'Draw your pattern';
 }
 
 function buildPatternGrid() {
@@ -4910,54 +4909,62 @@ function clearPattern() {
   if (errEl) errEl.style.display = 'none';
 }
 
+// 🔐 Login is now verified on the SERVER (hashed patterns), not just this browser — so it's
+// the same on every device/address and a stranger can't get in by opening a fresh browser.
+function _loginError(msg) {
+  var e = document.getElementById('role-error');
+  if (e) { e.textContent = msg; e.style.display = 'block'; }
+  if (typeof _sfx !== 'undefined' && _sfx.wrong) _sfx.wrong();
+  setTimeout(clearPattern, 600);
+}
+function _loginOk(name, patStr, firstTime) {
+  _patternConfirmMode = false; _patternConfirmSeq = [];
+  try { localStorage.setItem('sp_pat_' + name, patStr); } catch (e) {}  // local cache (offline fallback only)
+  currentRole = 'employee'; currentUser = name;
+  _sfx.login(); hideLanding(); applyRoleUI();
+  if (firstTime) showToast('Pattern set ✓');
+}
 function submitPattern() {
   var name = document.getElementById('role-name-select').value;
   if (!name) return;
-  var patKey = 'sp_pat_' + name;
-  var stored = localStorage.getItem(patKey);
   var patStr = _patternSeq.join('-');
+  if (!patStr) return;
 
-  if (!stored) {
-    // First time setup — require confirmation
-    if (!_patternConfirmMode) {
-      // Step 1: record first draw, ask to confirm
-      _patternConfirmSeq = _patternSeq.slice();
-      _patternConfirmMode = true;
-      var hint = document.getElementById('pattern-hint');
-      if (hint) hint.textContent = 'Draw the same pattern again to confirm';
-      clearPattern();
-      return;
+  // Confirm step (draw twice) for a brand-new pattern — server told us it needs setup.
+  if (_patternConfirmMode) {
+    if (_patternConfirmSeq.join('-') === patStr) {
+      shopPost('/shop/login', { name: name, pattern: patStr, set: true })
+        .then(function (r) { if (r && r.ok) _loginOk(name, patStr, true); else { _patternConfirmMode = false; _patternConfirmSeq = []; _loginError('Could not set pattern. Try again.'); } })
+        .catch(function () { _patternConfirmMode = false; _patternConfirmSeq = []; _loginError('Can’t reach server — check your connection.'); });
     } else {
-      // Step 2: compare with first draw
-      if (_patternConfirmSeq.join('-') === patStr) {
-        localStorage.setItem(patKey, patStr);
-        _patternConfirmMode = false;
-        _patternConfirmSeq = [];
-        currentRole = 'employee'; currentUser = name;
-        _sfx.login(); hideLanding(); applyRoleUI();
-        showToast('Pattern set ✓');
-      } else {
-        _patternConfirmMode = false;
-        _patternConfirmSeq = [];
-        var hint2 = document.getElementById('pattern-hint');
-        if (hint2) hint2.textContent = "Patterns didn’t match — try again";
-        var errEl = document.getElementById('role-error');
-        if (errEl) { errEl.textContent = "Patterns didn’t match. Start over."; errEl.style.display = 'block'; }
-        setTimeout(clearPattern, 800);
-      }
-      return;
+      _patternConfirmMode = false; _patternConfirmSeq = [];
+      var h = document.getElementById('pattern-hint'); if (h) h.textContent = "Patterns didn’t match — try again";
+      _loginError('Patterns didn’t match. Start over.');
     }
+    return;
   }
 
-  // Returning user — verify pattern
-  if (stored === patStr) {
-    currentRole = 'employee'; currentUser = name;
-    _sfx.login(); hideLanding(); applyRoleUI();
-  } else {
-    var errEl2 = document.getElementById('role-error');
-    if (errEl2) { errEl2.textContent = 'Incorrect pattern. Try again.'; errEl2.style.display = 'block'; } _sfx.wrong();
-    setTimeout(clearPattern, 600);
-  }
+  // Normal submit → verify on the server.
+  shopPost('/shop/login', { name: name, pattern: patStr })
+    .then(function (r) {
+      if (r && r.ok) { _loginOk(name, patStr, false); return; }
+      if (r && r.needSetup) {
+        // No pattern on file yet — run the "draw again to confirm" flow, then set it server-side.
+        _patternConfirmSeq = _patternSeq.slice();
+        _patternConfirmMode = true;
+        var h = document.getElementById('pattern-hint'); if (h) h.textContent = 'New pattern — draw it again to confirm';
+        clearPattern();
+        return;
+      }
+      _loginError(r && r.locked ? 'Too many tries — wait a minute.' : 'Incorrect pattern. Try again.');
+    })
+    .catch(function () {
+      // Server unreachable: fall back ONLY to a pattern this device set before (never let a
+      // fresh device in offline). Keeps staff working through a blip without opening the door.
+      var cached = null; try { cached = localStorage.getItem('sp_pat_' + name); } catch (e) {}
+      if (cached && cached === patStr) { currentRole = 'employee'; currentUser = name; _sfx.login(); hideLanding(); applyRoleUI(); }
+      else _loginError('Can’t reach server — check your connection.');
+    });
 }
 
 // ─── FINGERPRINT ─────────────────────────────────────────────
