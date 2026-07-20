@@ -982,7 +982,25 @@ const viewerState={};
 let zoomFrames=[],zoomIdx=0,zoomScale=1,zoomX=0,zoomY=0,pinchStart=null,pinchScale=1;
 
 // ─── CORE ─────────────────────────────────────────────────────
-function save(){var _saveOk=true;(function(){try{const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){_saveOk=false;console.warn('quota',e.message);}})();try{localStorage.setItem('sp_settings',JSON.stringify(settings));localStorage.setItem('sp_receipts',JSON.stringify(receipts));}catch(e){_saveOk=false;}
+function save(){var _saveOk=true;
+  function _writeShoes(){const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}
+  try{_writeShoes();}catch(e){
+    // 📦 STORAGE FULL → MAKE ROOM AND RETRY: a stock edit must not silently revert just because the
+    // phone's storage filled up. Evict the biggest NON-critical caches (they re-sync from the
+    // server/cloud) one at a time until the shoe write succeeds. Only runs on a real quota failure,
+    // so it can never hurt the normal save. Protects inventory, settings, deletions, edits + login.
+    try{
+      var _protect={sp_shoes:1,sp_settings:1,sp_version:1,sp_deleted:1,sp_overrides:1};
+      Object.keys(localStorage).forEach(function(k){ if(/pat|login|pin|auth|token/i.test(k)) _protect[k]=1; });
+      var _big=Object.keys(localStorage).filter(function(k){return !_protect[k];}).map(function(k){return [k,(localStorage.getItem(k)||'').length];}).sort(function(a,b){return b[1]-a[1];});
+      for(var _i=0;_i<_big.length;_i++){ try{localStorage.removeItem(_big[_i][0]);}catch(_e){}
+        try{_writeShoes(); _saveOk=true; break;}catch(_e2){_saveOk=false;} }
+      if(_saveOk){ try{receipts=JSON.parse(localStorage.getItem('sp_receipts')||'[]');}catch(_e3){} }
+    }catch(_e4){_saveOk=false;}
+    if(!_saveOk) console.warn('quota',e.message);
+  }
+  try{localStorage.setItem('sp_settings',JSON.stringify(settings));}catch(e){}
+  try{localStorage.setItem('sp_receipts',JSON.stringify(receipts));}catch(e){/* receipts live on the server too — don't fail the whole save over them */}
   // ── LOUD FAILURE: if the phone's storage rejected the write, the change did NOT
   // persist and WILL revert on the next sync. Never flash a fake green — warn hard.
   if(!_saveOk && !_isMerging){try{showToast('⚠️ NOT SAVED — phone storage full. Change will revert. Tell Rodney.',true);}catch(e){}try{_sfx&&_sfx.error&&_sfx.error();}catch(e){}}
