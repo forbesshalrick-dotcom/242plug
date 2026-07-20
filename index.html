@@ -3461,6 +3461,11 @@ function openBrandList(){
   // Force spinReversed onto these two regardless of localStorage state
   const _sr=shoes.find(s=>s.id==='jordan4pizza001');if(_sr)_sr.spinReversed=true;
   const _sr2=shoes.find(s=>s.id==='jordan4purple001');if(_sr2)_sr2.spinReversed=true;
+  // One-time stock correction: Wolf Grey Jordan 5 was stuck on the old sizes on some phones
+  // (stale localStorage overrode the correct catalog after a storage-full crash). Force the
+  // right stock ONCE, then leave it alone so future sales stick. Rodney 2026-07-19: it should be
+  // 7,7,7,7,8,9,9,10.5,11,11 (4×7, 8, 2×9, 10.5, 2×11).
+  try{ if(localStorage.getItem('sp_wolfgrey_sizes_v1')!=='1'){ const _wg=shoes.find(s=>s.id==='jordan5grey001'); if(_wg){ _wg.sizes=['7','7','7','7','8','9','9','10.5','11','11']; _wg.sold=false; } localStorage.setItem('sp_wolfgrey_sizes_v1','1'); } }catch(e){}
   (function(){try{const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}else if(Array.isArray(c.frames360)&&c.frames360[0]&&String(c.frames360[0]).indexOf('data:')===0){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){console.warn('quota',e.message);}})();
   if(!settings.scotiabank_name){
     Object.assign(settings,{scotiabank_name:'Rodney Munnings',scotiabank_acc:'004005367',scotiabank_transit:'70045',scotiabank_branch:'',scotiabank_enabled:true,cibc_name:'Rodney Munnings',cibc_acc:'201727284',cibc_transit:'09786',cibc_branch:'',cibc_enabled:true,suncash_instructions:'Send Sun Cash Voucher to: 8033126',suncash_enabled:true});

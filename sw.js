@@ -2,7 +2,7 @@
 // Network-FIRST for page loads/navigations: always try to fetch the freshest
 // HTML so a new deploy reaches users on their next open. The saved copy is used
 // only as an offline fallback. Other assets stay stale-while-revalidate for speed.
-const CACHE = 'plug242-v4';
+const CACHE = 'plug242-v5';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
