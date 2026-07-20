@@ -983,7 +983,7 @@ let zoomFrames=[],zoomIdx=0,zoomScale=1,zoomX=0,zoomY=0,pinchStart=null,pinchSca
 
 // ─── CORE ─────────────────────────────────────────────────────
 function save(){var _saveOk=true;
-  function _writeShoes(){const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}
+  function _writeShoes(){const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}else if(Array.isArray(c.frames360)&&c.frames360[0]&&String(c.frames360[0]).indexOf('data:')===0){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}
   try{_writeShoes();}catch(e){
     // 📦 STORAGE FULL → MAKE ROOM AND RETRY: a stock edit must not silently revert just because the
     // phone's storage filled up. Evict the biggest NON-critical caches (they re-sync from the
@@ -3211,14 +3211,35 @@ function togglePM(k){document.getElementById('pm-body-'+k).classList.toggle('ope
 function copyText(text,btn){navigator.clipboard.writeText(text).then(()=>{btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',2000);});}
 
 // ─── RECEIPTS ────────────────────────────────────────────────
-function handleReceiptFile(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{pendingReceipt=e.target.result;document.getElementById('receipt-upload-area').classList.add('has-file');document.getElementById('receipt-upload-label').innerHTML=`<div style="font-size:24px;margin-bottom:4px">✅</div><div style="font-weight:600">${file.name}</div>`;};reader.readAsDataURL(file);}
+// Shrink a data-URL image to <= maxPx on the long side at the given JPEG quality. Payment
+// screenshots stored full-size were blowing the ~5MB localStorage quota; ~1000px/0.55 keeps them
+// clearly readable at ~15-25x smaller. Falls back to the original if anything goes wrong.
+function _downscaleImg(dataUrl,maxPx,quality,cb){try{var img=new Image();img.onload=function(){try{var w=img.width,h=img.height,m=Math.max(w,h);if(m>maxPx){if(w>=h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}var c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);cb(c.toDataURL('image/jpeg',quality));}catch(e){cb(dataUrl);}};img.onerror=function(){cb(dataUrl);};img.src=dataUrl;}catch(e){cb(dataUrl);}}
+function handleReceiptFile(input){const file=input.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{pendingReceipt=e.target.result;_downscaleImg(e.target.result,1000,0.55,function(small){pendingReceipt=small;});document.getElementById('receipt-upload-area').classList.add('has-file');document.getElementById('receipt-upload-label').innerHTML=`<div style="font-size:24px;margin-bottom:4px">✅</div><div style="font-weight:600">${file.name}</div>`;};reader.readAsDataURL(file);}
+// Keep localStorage tiny: only the newest ~40 receipts keep their (small) image; older ones keep
+// the text record but drop the image so screenshots can never pile up and fill the box again.
+function _capReceipts(){try{if(!Array.isArray(receipts))return;for(var i=40;i<receipts.length;i++){if(receipts[i]&&receipts[i].image)receipts[i].image='';}if(receipts.length>400)receipts.length=400;}catch(e){}}
+// One-time cleanup: shrink any already-stored full-size receipt screenshots so the current bloat
+// drops immediately (this is what's overfilling storage today). Runs once, then flags itself done.
+function _shrinkExistingReceipts(){try{
+  if(localStorage.getItem('sp_receipts_shrunk_v1')==='1')return;
+  if(!Array.isArray(receipts)||!receipts.length){try{localStorage.setItem('sp_receipts_shrunk_v1','1');}catch(e){}return;}
+  var pending=0,done=false;
+  var finish=function(){if(done)return;done=true;_capReceipts();try{save();}catch(e){}try{localStorage.setItem('sp_receipts_shrunk_v1','1');}catch(e){}};
+  receipts.forEach(function(r,idx){
+    if(idx>=40){if(r&&r.image)r.image='';return;}
+    if(r&&typeof r.image==='string'&&r.image.indexOf('data:')===0&&r.image.length>140000){pending++;_downscaleImg(r.image,1000,0.55,function(small){r.image=small;pending--;if(pending===0)finish();});}
+  });
+  if(pending===0)finish();
+}catch(e){}}
+try{setTimeout(_shrinkExistingReceipts,2500);}catch(e){}
 function submitReceipt(){
   const name=document.getElementById('receipt-name').value.trim();
   if(!name){showToast('Please enter your name',true);return;}
   if(!pendingReceipt){showToast('Please upload receipt screenshot',true);return;}
   const waNumber=document.getElementById('receipt-wa')?.value.trim()||'';
   receipts.unshift({id:uid(),name,waNumber,note:document.getElementById('receipt-note').value.trim(),image:pendingReceipt,submittedAt:Date.now(),reviewed:false});
-  save();pendingReceipt=null;
+  _capReceipts();save();pendingReceipt=null;
   ['receipt-name','receipt-wa','receipt-note'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('receipt-file').value='';
   document.getElementById('receipt-upload-area').classList.remove('has-file');
@@ -3440,7 +3461,7 @@ function openBrandList(){
   // Force spinReversed onto these two regardless of localStorage state
   const _sr=shoes.find(s=>s.id==='jordan4pizza001');if(_sr)_sr.spinReversed=true;
   const _sr2=shoes.find(s=>s.id==='jordan4purple001');if(_sr2)_sr2.spinReversed=true;
-  (function(){try{const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){console.warn('quota',e.message);}})();
+  (function(){try{const catalogIds=typeof src!=='undefined'?src.map(x=>x.id):[];const lite=shoes.map(s=>{const c=Object.assign({},s);if(catalogIds.includes(s.id)){c.frames360=[];}else if(Array.isArray(c.frames360)&&c.frames360[0]&&String(c.frames360[0]).indexOf('data:')===0){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){console.warn('quota',e.message);}})();
   if(!settings.scotiabank_name){
     Object.assign(settings,{scotiabank_name:'Rodney Munnings',scotiabank_acc:'004005367',scotiabank_transit:'70045',scotiabank_branch:'',scotiabank_enabled:true,cibc_name:'Rodney Munnings',cibc_acc:'201727284',cibc_transit:'09786',cibc_branch:'',cibc_enabled:true,suncash_instructions:'Send Sun Cash Voucher to: 8033126',suncash_enabled:true});
     save();
@@ -4301,7 +4322,7 @@ function openBrandList(){
     });
     _applyCatalogOverrides(); // user edits win over the master list (so renames stick)
     // Save metadata to localStorage after building
-    try{const catIds=src.map(x=>x.id);const lite=shoes.map(s=>{const c=Object.assign({},s);if(catIds.includes(s.id)){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){console.warn('quota',e.message);}
+    try{const catIds=src.map(x=>x.id);const lite=shoes.map(s=>{const c=Object.assign({},s);if(catIds.includes(s.id)){c.frames360=[];}else if(Array.isArray(c.frames360)&&c.frames360[0]&&String(c.frames360[0]).indexOf('data:')===0){c.frames360=[];}c.video='';return c;});localStorage.setItem('sp_shoes',JSON.stringify(lite));}catch(e){console.warn('quota',e.message);}
   })();
 
   // ── Uniform spin start: begin every shoe at a toe-right side profile ──
