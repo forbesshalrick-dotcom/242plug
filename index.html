@@ -7415,7 +7415,22 @@ function syncInventory(){
         if(serverIds[s.id]) return;
         if(delSet[s.id]) return; // never re-seed a deleted shoe
         var isCat=catIds.indexOf(s.id)>-1;
-        if(isCat){ var c=cmap[s.id]||{}; if(JSON.stringify(s.sizes)!==JSON.stringify(c.sizes)||s.sold||(c.price!=null&&s.price!==c.price)||s.reorder||s.advertised){ shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); } }
+        if(isCat){
+          var c=cmap[s.id]||{};
+          // RESURRECTION GUARD (2026-07-24: sold-out catalog items reappearing in stock):
+          // this first-ever seed push had NO safety check, so a device with a stale local
+          // copy (never received a "sold" update — a background tab, an offline sale that
+          // never synced elsewhere) could silently re-publish an item as fully in stock the
+          // moment it was reopened, since the server had no prior record to defend against it.
+          // Only allow this seed to SHRINK stock relative to the immutable catalog baseline
+          // (report a sale / sold-out) — never let it claim MORE availability than the base
+          // catalog shows. A genuinely full-stock item never needed seeding in the first place.
+          var baseSizes=Array.isArray(c.sizes)?c.sizes:[];
+          var tally=function(arr){ var m={}; (arr||[]).forEach(function(x){ m[x]=(m[x]||0)+1; }); return m; };
+          var baseC=tally(baseSizes), curC=tally(s.sizes);
+          var isShrink = Object.keys(curC).every(function(k){ return curC[k]<=(baseC[k]||0); }) && (s.sizes.length<baseSizes.length || s.sold);
+          if(isShrink || s.reorder || s.advertised || (c.price!=null&&s.price!==c.price)){ shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); }
+        }
         else { shopPost('/shop/shoe',{shoe:liteShoe(s)}).catch(function(){}); }
       });
     }
